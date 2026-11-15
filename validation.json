@@ -1,0 +1,30 @@
+{
+  "input_type": "synthetic, not patient MRI",
+  "clinical_validation": false,
+  "checks": [
+    {
+      "mode": "knee",
+      "task": "12_findings",
+      "model": "RSNA Knee v76 · Efficiency Track #3",
+      "seconds": 11.55,
+      "outputs": 12,
+      "status": "passed"
+    },
+    {
+      "mode": "brain",
+      "task": "mci",
+      "model": "BrainIAC ViT-B/16 — MCI",
+      "seconds": 43.74,
+      "outputs": 2,
+      "status": "passed"
+    },
+    {
+      "mode": "brain",
+      "task": "idh",
+      "model": "BrainIAC ViT-B/16 — IDH",
+      "seconds": 1.39,
+      "outputs": 2,
+      "status": "passed"
+    }
+  ]
+}

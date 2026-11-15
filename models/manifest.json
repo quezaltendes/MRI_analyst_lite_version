@@ -1,0 +1,28 @@
+{
+  "knee": {
+    "file": "knee_v76.pt",
+    "size": 105587131,
+    "sha256": "1630d6ce3ecd79947b68bb9a2554be63ff778ca505a4219577c75255d77476ff",
+    "url": "https://github.com/huanghoujing/kaggle_rsna2026_knee/releases/download/v76-data/v76_r50rad_288_spatial_os10_kd56_joint3d_orient_ft8_pl5m_bksyn_gold2_ft8_kd70f_ft3_nojoint.pt",
+    "source": "https://github.com/huanghoujing/kaggle_rsna2026_knee",
+    "license": "CC-BY-NC-SA-4.0"
+  },
+  "mci": {
+    "file": "mci.safetensors",
+    "size": 353379268,
+    "url": "https://huggingface.co/eugenehp/brainiac/resolve/c8582059ea82d48a07796a1de29af12200594e3e/mci.safetensors",
+    "source": "https://github.com/AIM-KannLab/BrainIAC",
+    "mirror": "https://huggingface.co/eugenehp/brainiac/tree/c8582059ea82d48a07796a1de29af12200594e3e",
+    "license": "Mass General Brigham non-commercial academic research",
+    "sha256": "c57e48a51a4a7d638108953d74ed8661846c508dfb8fd5b8084f8ab3a45b2fda"
+  },
+  "idh": {
+    "file": "idh.safetensors",
+    "size": 353379268,
+    "url": "https://huggingface.co/eugenehp/brainiac/resolve/c8582059ea82d48a07796a1de29af12200594e3e/idh.safetensors",
+    "source": "https://github.com/AIM-KannLab/BrainIAC",
+    "mirror": "https://huggingface.co/eugenehp/brainiac/tree/c8582059ea82d48a07796a1de29af12200594e3e",
+    "license": "Mass General Brigham non-commercial academic research",
+    "sha256": "7a040faaba33bb7c940f4996f2a644045f0aff5ae276e04995f5cea70a9b5995"
+  }
+}

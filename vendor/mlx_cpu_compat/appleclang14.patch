@@ -1,0 +1,34 @@
+diff --git a/mlx/backend/cpu/matmul.cpp b/mlx/backend/cpu/matmul.cpp
+index 12781dc..8a8281c 100644
+--- a/mlx/backend/cpu/matmul.cpp
++++ b/mlx/backend/cpu/matmul.cpp
+@@ -90,8 +90,14 @@ void matmul_general(
+     }
+   };
+ 
+-  auto [a_transposed, lda, a] = check_transpose(a_pre);
+-  auto [b_transposed, ldb, b] = check_transpose(b_pre);
++  auto a_info = check_transpose(a_pre);
++  auto a_transposed = std::get<0>(a_info);
++  auto lda = std::get<1>(a_info);
++  auto a = std::get<2>(a_info);
++  auto b_info = check_transpose(b_pre);
++  auto b_transposed = std::get<0>(b_info);
++  auto ldb = std::get<1>(b_info);
++  auto b = std::get<2>(b_info);
+   size_t M = a.shape(-2);
+   size_t N = b.shape(-1);
+   if (M == 0 || N == 0) {
+diff --git a/mlx/backend/cpu/reduce.cpp b/mlx/backend/cpu/reduce.cpp
+index cd4911e..346a640 100644
+--- a/mlx/backend/cpu/reduce.cpp
++++ b/mlx/backend/cpu/reduce.cpp
+@@ -284,7 +284,7 @@ void float_reduction(
+     array& out,
+     const std::vector<int>& axes,
+     U init) {
+-  using AccT = ReductionAccumulator<T, U, Op>::type;
++  using AccT = typename ReductionAccumulator<T, U, Op>::type;
+   if constexpr (std::is_same_v<AccT, U>) {
+     reduction_op<T, U, Op>(x, out, axes, init);
+   } else {

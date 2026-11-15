@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A local research workspace for knee and brain MRI.">
+  <title>MRI Doctor — Imaging Research</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23050505'/%3E%3Cpath d='M14 6h4v8h8v4h-8v8h-4v-8H6v-4h8z' fill='white'/%3E%3C/svg%3E">
+  <link rel="preload" href="/static/assets/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body id="top">
+<a class="skip-link" href="#analysis">Skip to analysis</a>
+<svg class="svg-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+ <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 17V3m-5 5l5-5 5 5M4 16v4a1 1 0 001 1h14a1 1 0 001-1v-4"/></symbol>
+ <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6"/></symbol>
+ <symbol id="i-scan" viewBox="0 0 24 24"><path d="M8 3H4a1 1 0 00-1 1v4m13-5h4a1 1 0 011 1v4M3 16v4a1 1 0 001 1h4m8 0h4a1 1 0 001-1v-4M7 12h10m-5-5v10"/></symbol>
+ <symbol id="i-diagonal" viewBox="0 0 24 24"><path d="M5 19L19 5M5 5h14v14"/></symbol>
+</svg>
+<header class="site-header">
+ <a class="wordmark" href="#top" aria-label="MRI Doctor home">MRI DOCTOR<span class="wordmark-plus">+</span></a>
+ <nav aria-label="Main navigation"><a href="#regions">WORKSPACE</a><a href="#protocol">PROTOCOL</a><a class="nav-start" href="#analysis">ANALYZE <svg><use href="#i-diagonal"/></svg></a></nav>
+</header>
+<main>
+ <section class="hero" aria-labelledby="hero-title">
+  <div class="hero-art" aria-hidden="true">
+   <img class="hero-scan" src="/static/assets/brain-mri-axial.png" alt="" width="600" height="600" fetchpriority="high">
+   <img class="hero-scan" src="/static/assets/brain-mri-sagittal.png" alt="" width="1555" height="1384" decoding="async">
+   <img class="hero-scan" src="/static/assets/brain-mri-coronal.png" alt="" width="660" height="596" decoding="async">
+  </div>
+  <div class="hero-copy"><h1 id="hero-title"><span>MRI</span><span>Doctor</span></h1><p class="hero-description">A closer look at what lies within.<br>Explore knee and brain MRI through<br>open research and intelligent imaging.</p><a class="text-link hero-cta" href="#analysis">Start a study <svg><use href="#i-diagonal"/></svg></a></div>
+  <div class="hero-bottom"><a href="#regions" aria-label="Explore study regions"><span class="scroll-arrow">↓</span></a></div>
+ </section>
+ <section class="regions section-shell reveal" id="regions" aria-labelledby="mode-title">
+  
+  <h2 class="section-title" id="mode-title">Choose your <span>focus.</span></h2>
+  <div class="mode-grid" role="group" aria-label="Study region">
+   <button class="mode-card selected" data-mode="knee" aria-pressed="true"><div class="card-top"><span class="radio-dot"></span></div><h3>Knee</h3><p>Ligaments, menisci, cartilage, and bone.<br>Twelve findings, viewed independently.</p><div class="card-bottom"><svg class="card-arrow"><use href="#i-diagonal"/></svg></div></button>
+   <button class="mode-card" data-mode="brain" aria-pressed="false"><div class="card-top"><span class="radio-dot"></span></div><h3>Brain</h3><p>Cognitive status and IDH in glioma.<br>Two focused research tasks.</p><div class="card-bottom"><svg class="card-arrow"><use href="#i-diagonal"/></svg></div></button>
+  </div>
+ </section>
+ <section class="analysis section-shell reveal" id="analysis" aria-labelledby="analysis-title">
+  
+  <div class="analysis-title-row"><h2 class="section-title" id="analysis-title">A closer <span>look.</span></h2></div>
+  <div class="content-grid">
+   <section class="upload-panel" aria-labelledby="upload-title"><div class="panel-heading"><h3 id="upload-title">Upload your study</h3></div><p id="weights-status" class="weights-status" role="status">Checking availability…</p>
+    <form id="upload-form">
+     <div id="brain-task" class="brain-task" hidden><div class="task-tabs" role="group" aria-label="Brain analysis task"><button type="button" data-task="mci" aria-pressed="true" class="selected">MCI <span>Cognitive status</span></button><button type="button" data-task="idh" aria-pressed="false">IDH <span>Mutation status</span></button></div><p id="task-description" class="field-help"></p></div>
+     <div class="dropzone" id="dropzone"><div class="upload-orbit"><svg><use href="#i-upload"/></svg></div><h4 id="drop-title">Drop a ZIP containing DICOM series</h4><p id="drop-description">One MRI study of one knee</p><label class="file-button" for="file">Choose file <svg><use href="#i-diagonal"/></svg></label><input id="file" type="file" name="file" accept=".zip" class="file-input"><small id="file-format">DICOM in ZIP · up to 512 MB</small></div>
+     <div id="dual-inputs" class="dual-inputs" hidden><label class="dual-upload"><strong>FLAIR volume</strong><span class="file-button">Choose NIfTI ↗</span><input type="file" id="flair" accept=".nii,.nii.gz"><small id="flair-name">.nii or .nii.gz</small></label><label class="dual-upload"><strong>Contrast-enhanced T1</strong><span class="file-button">Choose NIfTI ↗</span><input type="file" id="t1ce" accept=".nii,.nii.gz"><small id="t1ce-name">.nii or .nii.gz</small></label></div>
+     <div class="selected-file" id="selected-file" hidden><svg><use href="#i-scan"/></svg><div><strong id="file-name"></strong><small id="file-size"></small></div><button type="button" id="remove-file" aria-label="Remove file">×</button></div>
+     <label class="preprocess-check" id="preprocess-row" hidden><input type="checkbox" id="preprocessed"><span>The volumes have undergone N4 correction, template registration, and skull stripping. For IDH, both sequences are co-registered.</span></label>
+     <div class="input-note"><span aria-hidden="true">↳</span><p id="input-note">Preserve spatial DICOM tags. If fat suppression is not specified in the tags, add <code>series.csv</code> to the ZIP.</p></div>
+     <label class="description-toggle"><input type="checkbox" id="include-description" checked><span>Include a written description</span></label><p id="description-availability" class="field-help" role="status">Descriptions are generated locally from selected slices.</p>
+     <div id="error" class="error" role="alert" hidden></div>
+     <div id="progress" class="progress-box" role="status" hidden><span class="spinner"></span><div><strong id="progress-title">Preparing</strong><small>Preparing your study may take a moment.</small></div></div>
+     <div class="submit-row"><span id="ready-label"><span class="tiny-dot"></span>Waiting for a file</span><button type="submit" id="analyze-button" class="primary-button" disabled>Start analysis<svg><use href="#i-diagonal"/></svg></button></div>
+    </form>
+   </section>
+
+  </div>
+  <div class="clinical-note"><p>Research estimates only. Results are not a clinical diagnosis and have not been calibrated for your population.</p></div>
+ </section>
+ <section id="results" class="results-panel section-shell" hidden aria-labelledby="results-title"><div class="results-heading"><h2 class="section-title" id="results-title">Read the <span>signals.</span></h2><button type="button" id="download-result" class="secondary-button">Download JSON <span>↓</span></button></div><section id="description-panel" class="description-panel" hidden aria-labelledby="description-title"><div class="description-heading"><h3 id="description-title">Study description</h3><button type="button" id="copy-description" class="secondary-button" hidden>Copy text ↗</button></div><p id="description-status" role="status"></p><div id="description-content"></div><p id="description-coverage" class="field-help"></p></section><div class="result-layout"><div class="scan-preview"><img id="preview" alt="A slice from the uploaded MRI"><p>Preview orientation is illustrative.<br>Do not use for diagnosis.</p></div><div class="probability-area"><div class="result-meta"><span id="result-time"></span></div><p id="probability-help" class="field-help"></p><div id="probability-bars"></div><div id="result-warnings" class="result-warnings"></div></div></div><div class="result-footer"><button type="button" id="forget-result">Delete result from memory <span>×</span></button></div></section>
+ <section class="protocol section-shell reveal" id="protocol" aria-labelledby="protocol-title"><h2 class="section-title" id="protocol-title">Research with<br><span>perspective.</span></h2><div class="protocol-grid"><article><h3>Keep it local.</h3><p>Inference runs on your computer. Original uploads are removed after processing. Results stay in server memory for up to one hour, or until you delete them.</p></article><article><h3>Start with the right input.</h3><p>Knee studies use DICOM series. Brain analysis requires preprocessed NIfTI volumes with N4 correction, template registration, and skull stripping.</p></article><article><h3>Context comes first.</h3><p>Probabilities belong to specific research tasks. IDH estimates mutation status in glioma; it does not detect tumor presence. Review model results with a radiologist.</p></article></div></section>
+</main>
+<footer class="site-footer"><div class="footer-top"><span class="footer-mark">MRI Doctor<span>+</span></span><a href="#analysis" class="footer-cta">Take a closer look <svg><use href="#i-diagonal"/></svg></a></div><div class="footer-bottom"><a href="#top">Back to top ↑</a></div></footer>
+</body>
+</html>
