@@ -4,6 +4,8 @@ A local research application with two modes, trained model weights, an English b
 
 Optional English written descriptions are generated locally from sampled views of the uploaded images, alongside the probabilities. See [REPORTING.md](REPORTING.md) for the model comparison, installation, privacy details, and sampling limits. This generator receives images rather than classifier scores.
 
+A small local **Lite text chat** is available at the bottom of the page. It can explain MRI terms and input requirements in English or Russian. Setup: `.venv/bin/python -m pip install -e '.[chat]'`, then `.venv/bin/python scripts/setup_chat.py`. See [CHAT.md](CHAT.md) for the model, limits, and privacy details.
+
 | Mode | Model | Input | Output |
 |---|---|---|---|
 | Knee | RSNA Knee v76, 3rd place in the Efficiency Track | ZIP containing one DICOM study | 12 independent model probabilities |

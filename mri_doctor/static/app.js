@@ -2,6 +2,7 @@
 const $ = id => document.getElementById(id);
 let mode = "knee", task = "mci", busy = false, serverStatus = null, jobId = null, result = null;
 let descriptionText = "";
+let chatBusy = false, chatHistory = [];
 
 function showError(message) {
   $("error").textContent = message;
@@ -22,12 +23,13 @@ function ready() {
   $("ready-label").replaceChildren();
   const dot = document.createElement("span"); dot.className = "tiny-dot";
   $("ready-label").append(dot, document.createTextNode(busy ? "Analysis in progress" : !installed ? "Analysis unavailable" : filesReady ? "Files selected" : "Waiting for a file"));
-  document.querySelectorAll("[data-mode], [data-task], input, #remove-file").forEach(el => { el.disabled = busy; });
+  document.querySelectorAll("[data-mode], [data-task], #upload-form input, #remove-file").forEach(el => { el.disabled = busy; });
   $("weights-status").classList.toggle("ready", !!installed);
   $("weights-status").textContent = installed ? "Ready to analyze" : "Analysis unavailable. See README for setup instructions.";
   $("description-availability").textContent = serverStatus?.description?.available
     ? "Generated locally from selected image slices. The draft requires radiologist review."
     : serverStatus?.description?.message || "Checking local description availability…";
+  chatReady();
 }
 function configure() {
   const brain = mode === "brain", dual = brain && task === "idh";
@@ -69,6 +71,7 @@ async function refreshStatus() {
     serverStatus = null;
     $("weights-status").textContent = "Cannot connect to the local server.";
     $("analyze-button").disabled = true;
+    chatReady();
   }
 }
 document.querySelectorAll("[data-mode]").forEach(button => button.addEventListener("click", () => {
@@ -238,6 +241,61 @@ $("forget-result").addEventListener("click", async () => {
   jobId = null; result = null; $("preview").removeAttribute("src"); $("probability-bars").replaceChildren();
   $("results").hidden = true; clearFiles(); ready();
   renderDescription(null);
+});
+function chatReady() {
+  const available = !!serverStatus?.chat?.available;
+  $("chat-send").disabled = chatBusy || busy || !available || !$("chat-input").value.trim();
+  $("clear-chat").disabled = chatBusy;
+  $("chat-status").textContent = chatBusy ? "Thinking…" : busy ? "Available after study analysis" : available
+    ? "Local assistant · Lite" : serverStatus?.chat?.message || "The local assistant is unavailable.";
+  document.querySelectorAll("#chat-suggestions button").forEach(button => { button.disabled = chatBusy || busy || !available; });
+}
+function addChatMessage(role, text) {
+  $("chat-welcome").hidden = true;
+  $("chat-suggestions").hidden = true;
+  const article = document.createElement("article"); article.className = `chat-message chat-${role}`;
+  const name = document.createElement("span"); name.className = "chat-speaker"; name.textContent = role === "user" ? "You" : "Assistant";
+  const body = document.createElement("p"); body.textContent = text; body.dir = "auto";
+  article.append(name, body); $("chat-messages").append(article);
+  $("chat-messages").scrollTop = $("chat-messages").scrollHeight;
+  return article;
+}
+$("chat-input").addEventListener("input", chatReady);
+$("chat-input").addEventListener("keydown", event => {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); $("chat-form").requestSubmit(); }
+});
+document.querySelectorAll("#chat-suggestions button").forEach(button => button.addEventListener("click", () => {
+  $("chat-input").value = button.textContent; chatReady(); $("chat-form").requestSubmit();
+}));
+$("chat-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const text = $("chat-input").value.trim();
+  if (!text || chatBusy || busy || !serverStatus?.chat?.available) return;
+  const message = {role: "user", content: text};
+  // Keep at most four previous pairs; no localStorage, cookies, or server-side history.
+  const messages = [...chatHistory.slice(-8), message];
+  const pending = addChatMessage("user", text);
+  $("chat-input").value = ""; $("chat-error").hidden = true; chatBusy = true; chatReady();
+  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 135000);
+  try {
+    const response = await fetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({messages}), signal:controller.signal});
+    const data = await response.json();
+    if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "The assistant could not reply. Please try a shorter question.");
+    addChatMessage("assistant", data.reply);
+    chatHistory = [...messages, {role: "assistant", content: data.reply.slice(0,1500)}];
+    if (data.shortened) { const note = document.createElement("p"); note.className = "chat-note"; note.textContent = "Reply shortened for Lite mode."; $("chat-messages").append(note); }
+  } catch (error) {
+    pending.remove(); $("chat-input").value = text;
+    if (!chatHistory.length) { $("chat-welcome").hidden = false; $("chat-suggestions").hidden = false; }
+    $("chat-error").textContent = error.name === "AbortError" ? "The assistant took too long. Please try again." : error.message;
+    $("chat-error").hidden = false;
+  } finally { clearTimeout(timeout); chatBusy = false; chatReady(); $("chat-input").focus(); }
+});
+$("clear-chat").addEventListener("click", () => {
+  if (chatBusy) return;
+  chatHistory = []; document.querySelectorAll("#chat-messages article, #chat-messages .chat-note").forEach(node => node.remove());
+  $("chat-welcome").hidden = false; $("chat-suggestions").hidden = false;
+  $("chat-input").value = ""; $("chat-error").hidden = true; chatReady();
 });
 configure(); refreshStatus(); setInterval(() => { if (!busy) refreshStatus(); }, 15000);
 

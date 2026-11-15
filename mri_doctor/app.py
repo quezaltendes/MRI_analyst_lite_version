@@ -21,12 +21,14 @@ from .errors import InputError, ModelUnavailable
 from .inputs import prepare_knee, unpack_zip
 from .models import availability, checkpoint_path, predict_brain, predict_knee
 from .reporting import EvidencePanels, description_status, generate_description
+from .chat import ChatError, ChatRequest, chat_status, generate_reply
 
 log = logging.getLogger("mri_doctor")
 jobs = {}
 lock = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mri-inference")
 JOB_TTL = 3600
+chat_gate = threading.BoundedSemaphore(1)
 
 
 @asynccontextmanager
@@ -85,7 +87,29 @@ def status():
             versions[name] = None
     return {"models": availability(), "device": device_name(), "notice": NOTICE,
             "max_upload_mb": MAX_UPLOAD // 1024**2, "versions": versions,
-            "description": description_status()}
+            "description": description_status(), "chat": chat_status()}
+
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest):
+    if not chat_gate.acquire(blocking=False):
+        raise HTTPException(429, "The assistant is answering another question. Please wait.")
+    with lock:
+        inference_busy = any(j["status"] in {"uploading", "queued", "running"} for j in jobs.values())
+    if inference_busy:
+        chat_gate.release()
+        raise HTTPException(429, "Please wait for study analysis to finish before using chat.")
+    try:
+        future = executor.submit(generate_reply, [m.model_dump() for m in request.messages])
+    except BaseException:
+        chat_gate.release()
+        raise
+    # Even if a tab disconnects, release capacity only when its worker has actually stopped.
+    future.add_done_callback(lambda _: chat_gate.release())
+    try:
+        return await asyncio.shield(asyncio.wrap_future(future))
+    except ChatError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
 
 
 def expire_jobs():
