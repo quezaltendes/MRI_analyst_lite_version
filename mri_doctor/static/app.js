@@ -1,6 +1,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
-let mode = "knee", task = "mci", busy = false, serverStatus = null, jobId = null, result = null;
+let mode = "auto", task = "mci", busy = false, serverStatus = null, jobId = null, result = null;
+let autoDetect = true, detecting = false, detectionTicket = 0;
 let descriptionText = "";
 let chatBusy = false, chatHistory = [];
 
@@ -12,20 +13,22 @@ function clearFiles() {
   ["file", "flair", "t1ce"].forEach(id => { $(id).value = ""; });
   $("flair-name").textContent = $("t1ce-name").textContent = ".nii or .nii.gz";
   $("preprocessed").checked = false;
+  $("spine-confirmed").checked = false;
   $("selected-file").hidden = true;
 }
 function ready() {
   const key = mode === "knee" ? "knee" : task;
-  const installed = serverStatus?.models[key]?.installed;
+  const installed = mode === "spine" ? serverStatus?.spine?.installed : mode === "auto" ? false : serverStatus?.models[key]?.installed;
   const filesReady = mode === "brain" && task === "idh"
     ? $("flair").files.length && $("t1ce").files.length : $("file").files.length;
-  $("analyze-button").disabled = busy || !installed || !filesReady || (mode === "brain" && !$("preprocessed").checked);
+  const formatReady = mode === "brain" && task === "idh" ? true : mode === "knee" ? /\.zip$/i.test($("file").files[0]?.name || "") : /\.nii(\.gz)?$/i.test($("file").files[0]?.name || "");
+  $("analyze-button").disabled = busy || detecting || mode === "auto" || !installed || !filesReady || !formatReady || (mode === "brain" && !$("preprocessed").checked) || (mode === "spine" && !$("spine-confirmed").checked);
   $("ready-label").replaceChildren();
   const dot = document.createElement("span"); dot.className = "tiny-dot";
-  $("ready-label").append(dot, document.createTextNode(busy ? "Analysis in progress" : !installed ? "Analysis unavailable" : filesReady ? "Files selected" : "Waiting for a file"));
-  document.querySelectorAll("[data-mode], [data-task], #upload-form input, #remove-file").forEach(el => { el.disabled = busy; });
+  $("ready-label").append(dot, document.createTextNode(busy ? "Analysis in progress" : detecting ? "Detecting region…" : mode === "auto" ? "Waiting for region selection" : !installed ? "Analysis unavailable" : filesReady ? "Files selected" : "Waiting for a file"));
+  document.querySelectorAll("[data-mode], [data-task], #upload-form input, #remove-file, #auto-region").forEach(el => { el.disabled = busy || detecting; });
   $("weights-status").classList.toggle("ready", !!installed);
-  $("weights-status").textContent = installed ? "Ready to analyze" : "Analysis unavailable. See README for setup instructions.";
+  $("weights-status").textContent = detecting ? "Detecting anatomical region…" : mode === "auto" ? "Choose a file to begin" : installed ? "Ready to analyze" : "Analysis unavailable. See README for setup instructions.";
   $("description-availability").textContent = serverStatus?.description?.available
     ? "Generated locally from selected image slices. The draft requires radiologist review."
     : serverStatus?.description?.message || "Checking local description availability…";
@@ -33,6 +36,9 @@ function ready() {
 }
 function configure() {
   const brain = mode === "brain", dual = brain && task === "idh";
+  const spinal = mode === "spine", automatic = mode === "auto";
+  $("auto-region").classList.toggle("selected", autoDetect);
+  $("auto-region").setAttribute("aria-pressed",String(autoDetect));
   document.querySelectorAll("[data-mode]").forEach(el => {
     el.classList.toggle("selected", el.dataset.mode === mode);
     el.setAttribute("aria-pressed", String(el.dataset.mode === mode));
@@ -42,18 +48,22 @@ function configure() {
     el.setAttribute("aria-pressed", String(el.dataset.task === task));
   });
   $("brain-task").hidden = $("preprocess-row").hidden = !brain;
+  $("spine-confirm-row").hidden = !spinal;
+  $("include-description").closest("label").hidden = $("description-availability").hidden = spinal || automatic;
   $("dropzone").hidden = dual;
   $("dual-inputs").hidden = !dual;
-  $("file").accept = brain ? ".nii,.nii.gz" : ".zip";
-  $("drop-title").textContent = brain ? "Drop a T1-weighted NIfTI" : "Drop a ZIP containing DICOM series";
-  $("drop-description").textContent = brain ? "One preprocessed 3D volume" : "One MRI study of one knee";
+  $("file").accept = autoDetect ? ".zip,.nii,.nii.gz" : brain || spinal ? ".nii,.nii.gz" : ".zip";
+  $("drop-title").textContent = automatic ? "Drop an MRI study" : spinal ? "Drop a T2-weighted NIfTI" : brain ? "Drop a T1-weighted NIfTI" : "Drop a ZIP containing DICOM series";
+  $("drop-description").textContent = automatic ? "The region will be selected automatically" : spinal ? "One 3D volume covering the spinal cord" : brain ? "One preprocessed 3D volume" : "One MRI study of one knee";
   const max = serverStatus?.max_upload_mb || 512;
-  $("file-format").textContent = (brain ? "NIfTI .nii / .nii.gz" : "DICOM in ZIP") + ` · up to ${max} MB`;
+  $("file-format").textContent = (automatic ? "DICOM ZIP or NIfTI" : brain || spinal ? "NIfTI .nii / .nii.gz" : "DICOM in ZIP") + ` · up to ${max} MB`;
   $("task-description").textContent = task === "mci"
     ? "Non-contrast T1. Binary MCI classification against a control group; not a general screen for brain diseases."
     : "FLAIR + contrast-enhanced T1 in the same space. Estimates IDH-mutant / wild-type status in glioma; not a test for tumor presence.";
   $("input-note").replaceChildren();
-  if (brain) $("input-note").textContent = "Brain scans must be preprocessed with N4 correction, template registration, and skull stripping.";
+  if (automatic) $("input-note").textContent = "Upload a study to detect its region. You can also select a region manually above.";
+  else if (spinal) $("input-note").textContent = "Provide T2 NIfTI with the spinal cord visible. No brain preprocessing is required. Segmentation does not detect a specific disease.";
+  else if (brain) $("input-note").textContent = "Brain scans must be preprocessed with N4 correction, template registration, and skull stripping.";
   else {
     $("input-note").append("Preserve spatial DICOM tags. If fat suppression is not specified in the tags, add this table to your ZIP: ");
     const code = document.createElement("code"); code.textContent = "series.csv";
@@ -75,10 +85,12 @@ async function refreshStatus() {
   }
 }
 document.querySelectorAll("[data-mode]").forEach(button => button.addEventListener("click", () => {
-  if (busy) return;
+  if (busy || detecting) return;
+  autoDetect = false; ++detectionTicket;
   if (mode !== button.dataset.mode) {
-    mode = button.dataset.mode; clearFiles(); showError(""); configure();
+    mode = button.dataset.mode; $("preprocessed").checked = $("spine-confirmed").checked = false;
   }
+  $("region-status").textContent = "Region selected manually."; showError(""); configure();
   if (button.classList.contains("mode-card")) {
     $("analysis").scrollIntoView({behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"});
   }
@@ -87,7 +99,12 @@ document.querySelectorAll("[data-task]").forEach(button => button.addEventListen
   if (busy || task === button.dataset.task) return;
   task = button.dataset.task; clearFiles(); showError(""); configure();
 }));
-function fileChanged() {
+$("auto-region").addEventListener("click", () => {
+  if (busy || detecting) return;
+  autoDetect = true; mode = "auto"; configure();
+  if ($("file").files.length) fileChanged();
+});
+async function fileChanged() {
   const file = $("file").files[0];
   $("selected-file").hidden = !file;
   if (file) {
@@ -95,6 +112,26 @@ function fileChanged() {
     $("file-size").textContent = `${(file.size / 1024 ** 2).toFixed(1)} MB`;
   }
   showError(""); ready();
+  if (!file || !autoDetect) return;
+  const ticket = ++detectionTicket;
+  if (file.size > (serverStatus?.max_upload_mb || 512)*1024**2) return showError("The file exceeds the upload limit.");
+  detecting = true; $("region-status").textContent = "Detecting the region locally… Image-based detection can take a few minutes."; ready();
+  try {
+    const data = new FormData(); data.set("file",file);
+    const response = await fetch("/api/detect",{method:"POST",body:data});
+    const detection = await response.json();
+    if (!response.ok) throw new Error(typeof detection.detail === "string" ? detection.detail : "Could not inspect this study.");
+    if (ticket !== detectionTicket) return;
+    if (["knee","brain","spine"].includes(detection.region)) {
+      mode = detection.region;
+      if (mode === "brain") task = "mci"; // Region detection never infers an IDH protocol or label.
+      for (const id of ["flair","t1ce"]) { $(id).value = ""; $(id+"-name").textContent = ".nii or .nii.gz"; }
+      $("preprocessed").checked = $("spine-confirmed").checked = false;
+      $("region-status").textContent = `Detected: ${{knee:"Knee",brain:"Brain",spine:"Spinal cord"}[mode]}. You can change the region above.`;
+      if (mode !== "knee" && /\.zip$/i.test(file.name)) showError("This region requires NIfTI. Extract the ZIP and choose the .nii or .nii.gz volume.");
+    } else { mode = "auto"; $("region-status").textContent = detection.message; }
+  } catch (error) { if (ticket === detectionTicket) { mode = "auto"; $("region-status").textContent = "Automatic detection could not finish. Choose the region manually."; showError(error.message); } }
+  finally { if (ticket === detectionTicket) { detecting = false; configure(); } }
 }
 $("file").addEventListener("change", fileChanged);
 $("remove-file").addEventListener("click", () => { $("file").value = ""; fileChanged(); });
@@ -103,14 +140,15 @@ for (const id of ["flair", "t1ce"]) $(id).addEventListener("change", () => {
   showError(""); ready();
 });
 $("preprocessed").addEventListener("change", ready);
+$("spine-confirmed").addEventListener("change",ready);
 for (const event of ["dragenter", "dragover"]) $("dropzone").addEventListener(event, e => {
-  e.preventDefault(); if (!busy) $("dropzone").classList.add("dragover");
+  e.preventDefault(); if (!busy && !detecting) $("dropzone").classList.add("dragover");
 });
 for (const event of ["dragleave", "drop"]) $("dropzone").addEventListener(event, e => {
   e.preventDefault(); $("dropzone").classList.remove("dragover");
 });
 $("dropzone").addEventListener("drop", e => {
-  if (busy) return;
+  if (busy || detecting) return;
   if (e.dataTransfer.files.length !== 1) return showError("Drop one file.");
   const transfer = new DataTransfer(); transfer.items.add(e.dataTransfer.files[0]);
   $("file").files = transfer.files; fileChanged();
@@ -149,7 +187,17 @@ function renderResult(data) {
   $("preview").src = data.preview;
   $("probability-help").textContent = data.probability_type === "multilabel"
     ? "Findings are independent: multiple abnormalities may coexist. The estimates do not add up to 100%."
-    : "Two mutually exclusive classes for the selected task. The control class does not rule out other conditions.";
+    : data.probability_type === "segmentation" ? "Spinal cord mask overlay. These measurements are not disease probabilities." : "Two mutually exclusive classes for the selected task. The control class does not rule out other conditions.";
+  const segmentation = data.segmentation;
+  $("segmentation-summary").hidden = !segmentation; $("segmentation-summary").replaceChildren();
+  $("download-mask").hidden = !segmentation?.mask_download_available;
+  if (segmentation) {
+    for (const [label,value] of [["Segmented volume",`${segmentation.volume_ml} mL`],["Foreground voxels",segmentation.voxel_count.toLocaleString()]]) {
+      const item = document.createElement("p"); item.textContent = label;
+      const number = document.createElement("strong"); number.textContent = value; item.append(number); $("segmentation-summary").append(item);
+    }
+    $("download-mask").href = `/api/jobs/${jobId}/mask`;
+  }
   $("probability-bars").replaceChildren();
   for (const item of [...data.probabilities].sort((a,b) => b.probability - a.probability)) {
     const row = document.createElement("div"); row.className = "probability-row";
@@ -214,6 +262,7 @@ $("upload-form").addEventListener("submit", async e => {
   busy = true; $("progress").hidden = false; $("progress-title").textContent = "Preparing upload"; ready();
   const data = new FormData(); data.set("mode", mode); data.set("task", task); data.set("preprocessed", String($("preprocessed").checked));
   data.set("include_description", String($("include-description").checked));
+  data.set("spine_confirmed",String($("spine-confirmed").checked));
   if (mode === "brain" && task === "idh") { data.set("flair", files[0]); data.set("t1ce", files[1]); }
   else data.set("file", files[0]);
   try {
@@ -244,11 +293,11 @@ $("forget-result").addEventListener("click", async () => {
 });
 function chatReady() {
   const available = !!serverStatus?.chat?.available;
-  $("chat-send").disabled = chatBusy || busy || !available || !$("chat-input").value.trim();
+  $("chat-send").disabled = chatBusy || busy || detecting || !available || !$("chat-input").value.trim();
   $("clear-chat").disabled = chatBusy;
   $("chat-status").textContent = chatBusy ? "Thinking…" : busy ? "Available after study analysis" : available
     ? "Local assistant · Lite" : serverStatus?.chat?.message || "The local assistant is unavailable.";
-  document.querySelectorAll("#chat-suggestions button").forEach(button => { button.disabled = chatBusy || busy || !available; });
+  document.querySelectorAll("#chat-suggestions button").forEach(button => { button.disabled = chatBusy || busy || detecting || !available; });
 }
 function addChatMessage(role, text) {
   $("chat-welcome").hidden = true;
@@ -270,7 +319,7 @@ document.querySelectorAll("#chat-suggestions button").forEach(button => button.a
 $("chat-form").addEventListener("submit", async event => {
   event.preventDefault();
   const text = $("chat-input").value.trim();
-  if (!text || chatBusy || busy || !serverStatus?.chat?.available) return;
+  if (!text || chatBusy || busy || detecting || !serverStatus?.chat?.available) return;
   const message = {role: "user", content: text};
   // Keep at most four previous pairs; no localStorage, cookies, or server-side history.
   const messages = [...chatHistory.slice(-8), message];

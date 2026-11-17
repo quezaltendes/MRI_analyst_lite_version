@@ -1,6 +1,8 @@
 # MRI Doctor
 
-A local research application with two modes, trained model weights, an English browser interface, and an HTTP API. Scans are not sent to external services.
+A local research application for knee and brain classification, with optional spinal cord segmentation, trained model weights, an English browser interface, and an HTTP API. Scans are not sent to external services.
+
+**Automatic region selection** is enabled by default: upload a study and the interface selects its anatomical region using explicit metadata or local image inference. Uncertain cases require manual selection. See [ANATOMY.md](ANATOMY.md) for setup and limits. The optional compact T2 spinal cord segmentation mode is described in [SPINE.md](SPINE.md).
 
 Optional English written descriptions are generated locally from sampled views of the uploaded images, alongside the probabilities. See [REPORTING.md](REPORTING.md) for the model comparison, installation, privacy details, and sampling limits. This generator receives images rather than classifier scores.
 
@@ -11,6 +13,7 @@ A small local **Lite text chat** is available at the bottom of the page. It can 
 | Knee | RSNA Knee v76, 3rd place in the Efficiency Track | ZIP containing one DICOM study | 12 independent model probabilities |
 | Brain / MCI | BrainIAC with MCI-specific weights | Non-contrast T1 NIfTI | MCI / control group |
 | Brain / IDH | BrainIAC with IDH-specific weights | FLAIR + T1CE NIfTI | IDH-mutant / wild-type status in glioma |
+| Spinal cord | Compact SCT DeepSeg SC adaptation | T2 NIfTI | Cord mask and volume, not disease probabilities |
 
 IDH does not detect whether a tumor is present; the MCI control class does not rule out other conditions. Outputs are sigmoid scores from trained classifiers. Clinical calibration for your population and suitability for medical decisions have not been established. Competition AUC does not establish clinical calibration.
 

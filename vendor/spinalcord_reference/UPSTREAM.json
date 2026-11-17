@@ -1,0 +1,5 @@
+{
+  "repository": "https://github.com/spinalcordtoolbox/spinalcordtoolbox",
+  "revision": "c343d2c0f66fe912fa1c1b3e664f0ee3c2bb5f6a",
+  "runtime": "Compact independent adapter in mri_doctor/spine.py; reference files are not imported."
+}

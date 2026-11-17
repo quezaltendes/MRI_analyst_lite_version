@@ -13,7 +13,7 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .config import MAX_UPLOAD, NOTICE, ROOT, device_name
@@ -22,6 +22,8 @@ from .inputs import prepare_knee, unpack_zip
 from .models import availability, checkpoint_path, predict_brain, predict_knee
 from .reporting import EvidencePanels, description_status, generate_description
 from .chat import ChatError, ChatRequest, chat_status, generate_reply
+from .spine import predict_spine, spine_available
+from .anatomy import detect_region
 
 log = logging.getLogger("mri_doctor")
 jobs = {}
@@ -29,6 +31,7 @@ lock = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mri-inference")
 JOB_TTL = 3600
 chat_gate = threading.BoundedSemaphore(1)
+detect_gate = threading.BoundedSemaphore(1)
 
 
 @asynccontextmanager
@@ -87,7 +90,37 @@ def status():
             versions[name] = None
     return {"models": availability(), "device": device_name(), "notice": NOTICE,
             "max_upload_mb": MAX_UPLOAD // 1024**2, "versions": versions,
-            "description": description_status(), "chat": chat_status()}
+            "description": description_status(), "chat": chat_status(),
+            "spine": {"installed": spine_available(), "kind":"segmentation"}}
+
+
+@app.post("/api/detect")
+async def detect(file: UploadFile = File(...)):
+    if not detect_gate.acquire(blocking=False):
+        await file.close()
+        raise HTTPException(429,"Another region detection is in progress. Please wait.")
+    workspace = None
+    submitted = False
+    try:
+        with lock:
+            if any(j["status"] in {"uploading","queued","running"} for j in jobs.values()):
+                raise HTTPException(429,"Wait for study analysis to finish before detecting another region.")
+        workspace = tempfile.TemporaryDirectory(prefix="mri-region-")
+        path, _ = await save_upload(file,Path(workspace.name),"scan",0)
+        future = executor.submit(detect_region,path,workspace.name)
+        def finished(_):
+            workspace.cleanup()
+            detect_gate.release()
+        future.add_done_callback(finished)
+        submitted = True
+        return await asyncio.shield(asyncio.wrap_future(future))
+    except InputError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    finally:
+        await file.close()
+        if not submitted:
+            if workspace is not None: workspace.cleanup()
+            detect_gate.release()
 
 
 @app.post("/api/chat")
@@ -137,15 +170,18 @@ def process(job_id, workspace, mode, task, paths, include_description=True):
             series, warnings = prepare_knee(unpacked, folder / "series")
             update_job(job_id, phase="Preparing slices and running inference")
             result = predict_knee(series, warnings, evidence_sink=evidence if include_description and description_status()["available"] else None)
+        elif mode == "spine":
+            update_job(job_id, phase="Segmenting the spinal cord")
+            result = predict_spine(paths[0])
         else:
             update_job(job_id, phase="Preparing brain images and running inference")
             result = predict_brain(task, paths, evidence_sink=evidence if include_description and description_status()["available"] else None)
-        if include_description:
+        if include_description and mode != "spine":
             update_job(job_id, phase="Writing description")
             result["description"] = generate_description(mode, task, evidence, folder)
         else:
             result["description"] = {"status": "not_requested"}
-        result.update(mode=mode, task=task if mode == "brain" else "12_findings", notice=NOTICE,
+        result.update(mode=mode, task=task if mode == "brain" else "cord_segmentation" if mode == "spine" else "12_findings", notice=NOTICE,
                       elapsed_seconds=round(time.perf_counter() - start, 2),
                       created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
         update_job(job_id, status="complete", phase="Complete", result=result)
@@ -182,10 +218,11 @@ async def save_upload(upload, folder, stem, total):
 
 
 @app.post("/api/jobs", status_code=202)
-async def create_job(mode: Literal["knee", "brain"] = Form(...),
+async def create_job(mode: Literal["knee", "brain", "spine"] = Form(...),
                      task: Literal["mci", "idh"] = Form("mci"),
                      preprocessed: bool = Form(False),
                      include_description: bool = Form(True),
+                     spine_confirmed: bool = Form(False),
                      file: UploadFile | None = File(None),
                      flair: UploadFile | None = File(None),
                      t1ce: UploadFile | None = File(None)):
@@ -196,6 +233,8 @@ async def create_job(mode: Literal["knee", "brain"] = Form(...),
     try:
         if mode == "brain" and not preprocessed:
             raise HTTPException(422, "For BrainIAC, confirm N4 correction, template registration, and skull stripping.")
+        if mode == "spine" and not spine_confirmed:
+            raise HTTPException(422,"Confirm that this is a T2 MRI covering the spinal cord.")
         expected = [flair, t1ce] if mode == "brain" and task == "idh" else [file]
         if any(x is None for x in expected) or len(uploads) != len(expected):
             raise HTTPException(422, "Knee/MCI: one file. IDH: flair and t1ce only, both are required.")
@@ -203,9 +242,11 @@ async def create_job(mode: Literal["knee", "brain"] = Form(...),
             name = (upload.filename or "").lower()
             if mode == "knee" and not name.endswith(".zip"):
                 raise HTTPException(422, "Knee mode requires a ZIP containing DICOM series.")
-            if mode == "brain" and not name.endswith((".nii", ".nii.gz")):
-                raise HTTPException(422, "BrainIAC requires NIfTI (.nii/.nii.gz).")
-        if not availability()[key]["installed"]:
+            if mode in {"brain","spine"} and not name.endswith((".nii", ".nii.gz")):
+                raise HTTPException(422, "This mode requires NIfTI (.nii/.nii.gz). Extract ZIP files before selecting a volume.")
+        if mode == "spine" and not spine_available():
+            raise HTTPException(503,"Spinal cord weights are missing. Run scripts/setup_spine.py.")
+        if mode != "spine" and not availability()[key]["installed"]:
             raise HTTPException(503, "The selected model weights are not installed yet. Run scripts/download_models.py.")
         with lock:
             expire_jobs()
@@ -240,7 +281,21 @@ def get_job(job_id: str):
         expire_jobs()
         if job_id not in jobs:
             raise HTTPException(404, "The job was not found or its result has expired (after 1 hour).")
-        return dict(jobs[job_id])
+        snapshot = dict(jobs[job_id])
+        if "result" in snapshot:
+            snapshot["result"] = {k:v for k,v in snapshot["result"].items() if k != "_mask_nifti_gz"}
+        return snapshot
+
+
+@app.get("/api/jobs/{job_id}/mask")
+def download_mask(job_id: str):
+    with lock:
+        expire_jobs()
+        result = jobs.get(job_id,{}).get("result",{})
+        payload = result.get("_mask_nifti_gz")
+        if payload is None: raise HTTPException(404,"The segmentation mask is unavailable or expired.")
+    return Response(content=payload,media_type="application/gzip",
+                    headers={"Content-Disposition":'attachment; filename="spinal-cord-mask.nii.gz"'})
 
 
 @app.delete("/api/jobs/{job_id}")

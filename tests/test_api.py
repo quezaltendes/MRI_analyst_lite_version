@@ -57,3 +57,22 @@ def test_job_error_deletes_temporary_images(tmp_path, monkeypatch):
     assert api.jobs["cleanup-test"]["status"] == "error"
     assert not Path(workspace.name).exists()
     api.jobs.pop("cleanup-test")
+
+
+def test_spine_requires_confirmation(client):
+    response = client.post('/api/jobs', data={'mode':'spine'}, files={'file':('image.nii.gz',b'invalid')})
+    assert response.status_code == 422
+    assert 'T2' in response.json()['detail']
+
+
+def test_mask_is_downloaded_separately_and_deleted(client):
+    import time
+    api.jobs['mask-test'] = {'status':'complete','updated_at':time.time(),
+                            'result':{'probabilities':[],'_mask_nifti_gz':b'private-binary'}}
+    try:
+        assert '_mask_nifti_gz' not in client.get('/api/jobs/mask-test').json()['result']
+        assert client.get('/api/jobs/mask-test/mask').content == b'private-binary'
+        assert client.delete('/api/jobs/mask-test').status_code == 200
+        assert client.get('/api/jobs/mask-test/mask').status_code == 404
+    finally:
+        api.jobs.pop('mask-test',None)

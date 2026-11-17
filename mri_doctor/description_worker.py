@@ -53,7 +53,7 @@ def main():
     if config.get("model_type") != "gemma3":
         raise ValueError("Expected the Gemma 3 multimodal architecture")
     prompt = apply_chat_template(processor, config, request["prompt"], num_images=len(request["images"]))
-    output = generate(model, processor, prompt, image=request["images"], max_tokens=850, temperature=0.0, verbose=False)
+    output = generate(model, processor, prompt, image=request["images"], max_tokens=min(850,max(16,int(request.get("max_tokens",850)))), temperature=0.0, verbose=False)
     text = output.text if hasattr(output, "text") else output
     if not isinstance(text, str): raise ValueError("No text generated")
     Path(args.output).write_text(json.dumps({"text": text, "elapsed_seconds": round(time.monotonic()-started, 2)}))
