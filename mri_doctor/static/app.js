@@ -28,10 +28,7 @@ function ready() {
   $("ready-label").append(dot, document.createTextNode(busy ? "Analysis in progress" : detecting ? "Detecting region…" : mode === "auto" ? "Waiting for region selection" : !installed ? "Analysis unavailable" : filesReady ? "Files selected" : "Waiting for a file"));
   document.querySelectorAll("[data-mode], [data-task], #upload-form input, #remove-file, #auto-region").forEach(el => { el.disabled = busy || detecting; });
   $("weights-status").classList.toggle("ready", !!installed);
-  $("weights-status").textContent = detecting ? "Detecting anatomical region…" : mode === "auto" ? "Choose a file to begin" : installed ? "Ready to analyze" : "Analysis unavailable. See README for setup instructions.";
-  $("description-availability").textContent = serverStatus?.description?.available
-    ? "Generated locally from selected image slices. The draft requires radiologist review."
-    : serverStatus?.description?.message || "Checking local description availability…";
+  $("weights-status").textContent = detecting ? "Detecting anatomical region…" : mode === "auto" ? "Choose a file to begin" : installed ? "Ready" : "Analysis unavailable. See README for setup instructions.";
   chatReady();
 }
 function configure() {
@@ -49,26 +46,14 @@ function configure() {
   });
   $("brain-task").hidden = $("preprocess-row").hidden = !brain;
   $("spine-confirm-row").hidden = !spinal;
-  $("include-description").closest("label").hidden = $("description-availability").hidden = spinal || automatic;
+  $("include-description").closest("label").hidden = spinal || automatic;
   $("dropzone").hidden = dual;
   $("dual-inputs").hidden = !dual;
   $("file").accept = autoDetect ? ".zip,.nii,.nii.gz" : brain || spinal ? ".nii,.nii.gz" : ".zip";
-  $("drop-title").textContent = automatic ? "Drop an MRI study" : spinal ? "Drop a T2-weighted NIfTI" : brain ? "Drop a T1-weighted NIfTI" : "Drop a ZIP containing DICOM series";
-  $("drop-description").textContent = automatic ? "The region will be selected automatically" : spinal ? "One 3D volume covering the spinal cord" : brain ? "One preprocessed 3D volume" : "One MRI study of one knee";
+  $("drop-title").textContent = automatic ? "Drop an MRI scan" : spinal ? "Drop a T2-weighted NIfTI" : brain ? "Drop a T1-weighted NIfTI" : "Drop a DICOM ZIP";
+  $("drop-description").textContent = automatic ? "The region will be selected automatically" : spinal ? "One 3D volume covering the spinal cord" : brain ? "One preprocessed 3D volume" : "One knee scan";
   const max = serverStatus?.max_upload_mb || 512;
   $("file-format").textContent = (automatic ? "DICOM ZIP or NIfTI" : brain || spinal ? "NIfTI .nii / .nii.gz" : "DICOM in ZIP") + ` · up to ${max} MB`;
-  $("task-description").textContent = task === "mci"
-    ? "Non-contrast T1. Binary MCI classification against a control group; not a general screen for brain diseases."
-    : "FLAIR + contrast-enhanced T1 in the same space. Estimates IDH-mutant / wild-type status in glioma; not a test for tumor presence.";
-  $("input-note").replaceChildren();
-  if (automatic) $("input-note").textContent = "Upload a study to detect its region. You can also select a region manually above.";
-  else if (spinal) $("input-note").textContent = "Provide T2 NIfTI with the spinal cord visible. No brain preprocessing is required. Segmentation does not detect a specific disease.";
-  else if (brain) $("input-note").textContent = "Brain scans must be preprocessed with N4 correction, template registration, and skull stripping.";
-  else {
-    $("input-note").append("Preserve spatial DICOM tags. If fat suppression is not specified in the tags, add this table to your ZIP: ");
-    const code = document.createElement("code"); code.textContent = "series.csv";
-    $("input-note").append(code, ".");
-  }
   ready();
 }
 async function refreshStatus() {
@@ -90,7 +75,7 @@ document.querySelectorAll("[data-mode]").forEach(button => button.addEventListen
   if (mode !== button.dataset.mode) {
     mode = button.dataset.mode; $("preprocessed").checked = $("spine-confirmed").checked = false;
   }
-  $("region-status").textContent = "Region selected manually."; showError(""); configure();
+  $("region-status").textContent = ""; showError(""); configure();
   if (button.classList.contains("mode-card")) {
     $("analysis").scrollIntoView({behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"});
   }
@@ -115,7 +100,7 @@ async function fileChanged() {
   if (!file || !autoDetect) return;
   const ticket = ++detectionTicket;
   if (file.size > (serverStatus?.max_upload_mb || 512)*1024**2) return showError("The file exceeds the upload limit.");
-  detecting = true; $("region-status").textContent = "Detecting the region locally… Image-based detection can take a few minutes."; ready();
+  detecting = true; $("region-status").textContent = "Detecting region… This may take a few minutes."; ready();
   try {
     const data = new FormData(); data.set("file",file);
     const response = await fetch("/api/detect",{method:"POST",body:data});
@@ -127,7 +112,7 @@ async function fileChanged() {
       if (mode === "brain") task = "mci"; // Region detection never infers an IDH protocol or label.
       for (const id of ["flair","t1ce"]) { $(id).value = ""; $(id+"-name").textContent = ".nii or .nii.gz"; }
       $("preprocessed").checked = $("spine-confirmed").checked = false;
-      $("region-status").textContent = `Detected: ${{knee:"Knee",brain:"Brain",spine:"Spinal cord"}[mode]}. You can change the region above.`;
+      $("region-status").textContent = `Detected: ${{knee:"Knee",brain:"Brain",spine:"Spinal cord"}[mode]}.`;
       if (mode !== "knee" && /\.zip$/i.test(file.name)) showError("This region requires NIfTI. Extract the ZIP and choose the .nii or .nii.gz volume.");
     } else { mode = "auto"; $("region-status").textContent = detection.message; }
   } catch (error) { if (ticket === detectionTicket) { mode = "auto"; $("region-status").textContent = "Automatic detection could not finish. Choose the region manually."; showError(error.message); } }
@@ -185,9 +170,6 @@ function renderResult(data) {
   result = data;
   $("result-time").textContent = `${data.elapsed_seconds} s`;
   $("preview").src = data.preview;
-  $("probability-help").textContent = data.probability_type === "multilabel"
-    ? "Findings are independent: multiple abnormalities may coexist. The estimates do not add up to 100%."
-    : data.probability_type === "segmentation" ? "Spinal cord mask overlay. These measurements are not disease probabilities." : "Two mutually exclusive classes for the selected task. The control class does not rule out other conditions.";
   const segmentation = data.segmentation;
   $("segmentation-summary").hidden = !segmentation; $("segmentation-summary").replaceChildren();
   $("download-mask").hidden = !segmentation?.mask_download_available;
@@ -221,7 +203,6 @@ function renderDescription(description) {
   const show = description && description.status !== "not_requested";
   $("description-panel").hidden = !show;
   $("description-content").replaceChildren();
-  $("description-coverage").textContent = "";
   $("copy-description").hidden = true;
   descriptionText = "";
   if (!show) return;
@@ -229,7 +210,7 @@ function renderDescription(description) {
     $("description-status").textContent = description.message || "A written image description could not be generated. Probability estimates are shown below.";
     return;
   }
-  $("description-status").textContent = "Experimental draft from selected slices; not a final radiology report.";
+  $("description-status").textContent = "";
   const titles = {technique: "Images reviewed", observations: "Observations", impression: "Interpretation", limitations: "Limitations"};
   const copied = ["Study description — experimental draft"];
   for (const [key, title] of Object.entries(titles)) {
@@ -244,8 +225,6 @@ function renderDescription(description) {
     } else { const text = document.createElement("p"); text.textContent = value; section.append(text); copied.push(value); }
     $("description-content").append(section);
   }
-  const slices = description.coverage.reduce((n, panel) => n + panel.sampled_frames, 0);
-  $("description-coverage").textContent = `Based on ${slices} sampled slice views across ${description.panel_count} image panels. The full study was not reviewed slice by slice.`;
   descriptionText = copied.join("\n");
   $("copy-description").hidden = false;
 }
@@ -296,7 +275,7 @@ function chatReady() {
   $("chat-send").disabled = chatBusy || busy || detecting || !available || !$("chat-input").value.trim();
   $("clear-chat").disabled = chatBusy;
   $("chat-status").textContent = chatBusy ? "Thinking…" : busy ? "Available after study analysis" : available
-    ? "Local assistant · Lite" : serverStatus?.chat?.message || "The local assistant is unavailable.";
+    ? "Ready" : serverStatus?.chat?.message || "The local assistant is unavailable.";
   document.querySelectorAll("#chat-suggestions button").forEach(button => { button.disabled = chatBusy || busy || detecting || !available; });
 }
 function addChatMessage(role, text) {

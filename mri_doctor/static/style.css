@@ -35,3 +35,6 @@
 @media(max-width:600px){.chat-card{padding:20px 18px}.chat-welcome{font-size:18px}.chat-message{grid-template-columns:1fr;gap:6px;padding:15px 0}.chat-message p{font-size:13px}.chat-compose{gap:12px}.chat-compose textarea{font-size:13px}.chat-compose button{font-size:12px;padding:14px;gap:14px}.chat-suggestions button{font-size:10px}.chat-title-row{gap:15px}.chat-lite-badge{font-size:11px;padding:5px 10px}}
 
 .auto-region{background:transparent;border:1px solid #444;color:#999;padding:12px 18px;font:inherit;font-size:12px;margin:0 0 24px}.auto-region.selected{border-color:#aaa;color:#eee}.mode-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.mode-card h3{font-size:clamp(28px,3.5vw,56px)}.segmentation-summary{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:30px 0}.segmentation-summary p{font-size:12px;color:#999;margin:0}.segmentation-summary strong{display:block;color:#eee;font-size:28px;font-weight:400;margin-top:12px}.upload-panel #region-status{margin-bottom:24px}@media(max-width:700px){.mode-grid{grid-template-columns:1fr}.mode-card{min-height:210px}.mode-card h3{font-size:38px}.segmentation-summary strong{font-size:22px}}
+
+/* Empty status messages do not add space to the page. */
+#region-status:empty,#description-status:empty{display:none}
